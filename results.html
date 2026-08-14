@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Live Rally Control Logs</title>
+  <style>
+    body { font-family: sans-serif; background: #121212; color: #fff; padding: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #333; padding: 10px; text-align: left; }
+    th { background: #1e1e1e; color: #ff9800; }
+  </style>
+</head>
+<body>
+  <h2>Live Marshal Control Stream</h2>
+  <table id="logs-table">
+    <thead>
+      <tr>
+        <th>Control</th>
+        <th>Car #</th>
+        <th>Time Logged</th>
+        <th>ISO Timestamp</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+    import { getFirestore, collection, query, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCLi3NMmoJJCeJFGU4oeABpQyivQe1Z6i0",
+      authDomain: "the-regulator-rally.firebaseapp.com",
+      projectId: "the-regulator-rally"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const tbody = document.querySelector("#logs-table tbody");
+
+    // Listen for live updates in reverse chronological order
+    const q = query(collection(db, "control_logs"), orderBy("epochMs", "desc"));
+    onSnapshot(q, (snapshot) => {
+      tbody.innerHTML = "";
+      snapshot.forEach((doc) => {
+        const d = doc.data();
+        const row = `<tr>
+          <td>${d.controlPoint}</td>
+          <td><b>#${d.carNumber}</b></td>
+          <td>${d.timeDisplay}</td>
+          <td>${d.timestampISO}</td>
+        </tr>`;
+        tbody.innerHTML += row;
+      });
+    });
+  </script>
+</body>
+</html>
