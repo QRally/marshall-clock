@@ -198,16 +198,17 @@
 
     /* Recent Logs */
     .log-container {
-      background: var(--card-bg);
-      border-radius: 12px;
-      padding: 12px;
-      max-height: 200px;
-      overflow-y: auto;
-      border: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 12px;
+  max-height: 180px; /* Gives room for more rows */
+  margin-bottom: 40px; /* Prevents the box getting cut off by screen edge */
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 
     .log-title {
       font-size: 0.75rem;
