@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Rally Marshal Checkpoint Tool</title>
+  <style>
+    :root {
+      --bg: #121212;
+      --card-bg: #1e1e1e;
+      --accent: #ff9800;
+      --accent-hover: #e68a00;
+      --text: #ffffff;
+      --text-dim: #aaaaaa;
+      --danger: #f44336;
+      --success: #4caf50;
+      --border: #333333;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Top Bar */
+    header {
+      background-color: var(--card-bg);
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-title {
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: 0.5px;
+    }
+
+    .sync-status {
+      font-size: 0.8rem;
+      padding: 4px 10px;
+      border-radius: 12px;
+      background: var(--border);
+      color: var(--text-dim);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .sync-status.online {
+      background: rgba(76, 175, 80, 0.2);
+      color: var(--success);
+    }
+
+    /* Main Container */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 12px;
+      gap: 12px;
+      max-width: 500px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* Live Clock & Control Dropdown Header */
+    .control-card {
+      background: var(--card-bg);
+      padding: 12px 16px;
+      border-radius: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: 1px solid var(--border);
+    }
+
+    .control-id {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .control-dropdown {
+      background: var(--bg);
+      color: var(--accent);
+      border: 1px solid var(--border);
+      font-size: 1rem;
+      font-weight: 700;
+      padding: 6px 8px;
+      border-radius: 8px;
+      width: 100%;
+      outline: none;
+      margin-top: 4px;
+    }
+
+    .control-dropdown option {
+      background: var(--card-bg);
+      color: var(--text);
+    }
+
+    .clock-display {
+      font-family: monospace;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    /* Input Display Box */
+    .display-card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      border: 2px solid var(--accent);
+    }
+
+    .car-number-label {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .car-number-value {
+      font-size: 2.5rem;
+      font-weight: 800;
+      min-height: 50px;
+      letter-spacing: 2px;
+    }
+
+    /* Keypad */
+    .keypad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      flex: 1;
+    }
+
+    .btn-key {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 1.8rem;
+      font-weight: 700;
+      border-radius: 10px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .btn-key:active {
+      background-color: var(--border);
+    }
+
+    .btn-clear {
+      color: var(--danger);
+      font-size: 1.2rem;
+    }
+
+    .btn-submit {
+      grid-column: span 3;
+      background-color: var(--accent);
+      color: #000;
+      font-size: 1.4rem;
+      font-weight: 800;
+      border-radius: 10px;
+      border: none;
+      padding: 16px;
+      text-transform: uppercase;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .btn-submit:active {
+      background-color: var(--accent-hover);
+    }
+
+    /* Recent Logs */
+    .log-container {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 12px;
+      max-height: 130px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .log-title {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .log-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 8px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+
+    .log-item .car {
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .log-item .time {
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-title">Rally Timing Control</div>
+    <div id="sync-status" class="sync-status">Offline Cache Active</div>
+  </header>
+
+  <main>
+    <!-- Clock Header & Selectable Time Control -->
+    <div class="control-card">
+      <div style="flex: 1; margin-right: 12px;">
+        <div class="control-id">Select Control Point</div>
+        <select id="control-select" class="control-dropdown">
+          <option value="MTC-01">MTC-01 (Start)</option>
+          <option value="TC-01" selected>TC-01 (Main Exit)</option>
+          <option value="TC-02">TC-02 (Mid Stage)</option>
+          <option value="TC-03">TC-03 (Stage Finish)</option>
+          <option value="MTC-02">MTC-02 (Regroup In)</option>
+        </select>
+      </div>
+      <div id="clock" class="clock-display">00:00:00</div>
+    </div>
+
+    <!-- Car Number Display -->
+    <div class="display-card">
+      <div class="car-number-label">Entering Car #</div>
+      <div id="car-display" class="car-number-value">---</div>
+    </div>
+
+    <!-- On-Screen Keypad -->
+    <div class="keypad">
+      <button class="btn-key" onclick="pressKey('1')">1</button>
+      <button class="btn-key" onclick="pressKey('2')">2</button>
+      <button class="btn-key" onclick="pressKey('3')">3</button>
+      <button class="btn-key" onclick="pressKey('4')">4</button>
+      <button class="btn-key" onclick="pressKey('5')">5</button>
+      <button class="btn-key" onclick="pressKey('6')">6</button>
+      <button class="btn-key" onclick="pressKey('7')">7</button>
+      <button class="btn-key" onclick="pressKey('8')">8</button>
+      <button class="btn-key" onclick="pressKey('9')">9</button>
+      <button class="btn-key btn-clear" onclick="clearDisplay()">CLR</button>
+      <button class="btn-key" onclick="pressKey('0')">0</button>
+      <button class="btn-key btn-clear" onclick="backspace()">⌫</button>
+      <button class="btn-submit" onclick="submitEntry()">LOG TIME NOW</button>
+    </div>
+
+    <!-- Recent Entries Log -->
+    <div class="log-container">
+      <div class="log-title">Recent Control Logs</div>
+      <div id="log-list"></div>
+    </div>
+  </main>
+
+  <!-- Firebase v10 Modular CDN Imports -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+    import { 
+      initializeFirestore, 
+      collection, 
+      addDoc, 
+      persistentLocalCache, 
+      persistentMultipleTabManager 
+    } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+
+    // Your exact Firebase project keys
+    const firebaseConfig = {
+      apiKey: "AIzaSyCLi3NMmoJJCeJFGU4oeABpQyivQe1Z6i0",
+      authDomain: "the-regulator-rally.firebaseapp.com",
+      databaseURL: "https://the-regulator-rally-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "the-regulator-rally",
+      storageBucket: "the-regulator-rally.firebasestorage.app",
+      messagingSenderId: "1026958520151",
+      appId: "1:1026958520151:web:1665550c6b9e3a8bf9d812"
+    };
+
+    // Initialize App
+    const app = initializeApp(firebaseConfig);
+
+    // Initialize Firestore with IndexedDB persistent offline cache
+    const db = initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager()
+      })
+    });
+
+    // App State
+    let currentInput = "";
+    const logsList = document.getElementById("log-list");
+    const syncStatus = document.getElementById("sync-status");
+
+    // 1. Live Clock Engine
+    function updateClock() {
+      const now = new Date();
+      const hrs = String(now.getHours()).padStart(2, '0');
+      const mins = String(now.getMinutes()).padStart(2, '0');
+      const secs = String(now.getSeconds()).padStart(2, '0');
+      document.getElementById('clock').textContent = `${hrs}:${mins}:${secs}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // 2. Network Status Monitoring
+    function updateOnlineStatus() {
+      if (navigator.onLine) {
+        syncStatus.textContent = "Online / Live";
+        syncStatus.classList.add("online");
+      } else {
+        syncStatus.textContent = "Offline (Local Queue Active)";
+        syncStatus.classList.remove("online");
+      }
+    }
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
+
+    // 3. Keypad logic bound to window
+    window.pressKey = function(digit) {
+      if (currentInput.length < 4) {
+        currentInput += digit;
+        updateDisplay();
+      }
+    };
+
+    window.clearDisplay = function() {
+      currentInput = "";
+      updateDisplay();
+    };
+
+    window.backspace = function() {
+      currentInput = currentInput.slice(0, -1);
+      updateDisplay();
+    };
+
+    function updateDisplay() {
+      const display = document.getElementById('car-display');
+      display.textContent = currentInput.length > 0 ? currentInput : "---";
+    }
+
+    // 4. Submit Entry to Cloud Firestore
+    window.submitEntry = async function() {
+      if (!currentInput) {
+        alert("Enter a Car Number first!");
+        return;
+      }
+
+      const controlSelect = document.getElementById("control-select");
+      const selectedControl = controlSelect.value;
+      const timestamp = new Date();
+      const carNo = currentInput;
+      
+      const payload = {
+        carNumber: carNo,
+        controlPoint: selectedControl,
+        timestampISO: timestamp.toISOString(),
+        timeDisplay: document.getElementById('clock').textContent,
+        epochMs: timestamp.getTime()
+      };
+
+      // Instant UI response
+      prependLocalLog(carNo, payload.timeDisplay, selectedControl);
+      clearDisplay();
+
+      try {
+        // Saves immediately to IndexedDB local cache & syncs to cloud
+        await addDoc(collection(db, "control_logs"), payload);
+      } catch (err) {
+        console.warn("Doc written to offline cache queue:", err);
+      }
+    };
+
+    function prependLocalLog(car, timeStr, control) {
+      const item = document.createElement("div");
+      item.className = "log-item";
+      item.innerHTML = `
+        <span class="car">[${control}] Car #${car}</span>
+        <span class="time">${timeStr}</span>
+      `;
+      logsList.prepend(item);
+    }
+  </script>
+</body>
+</html>
