@@ -26,7 +26,7 @@
     .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 10px; margin-bottom: 8px; }
     .control-row { display: flex; justify-content: space-between; align-items: center; }
     select { background: #000; color: var(--accent); border: 1px solid var(--border); padding: 6px 10px; border-radius: 6px; font-weight: bold; font-size: 0.95rem; }
-    .clock { font-size: 1.4rem; font-weight: bold; color: var(--accent); font-mono: monospace; }
+    .clock { font-size: 1.4rem; font-weight: bold; color: var(--accent); font-family: monospace; }
 
     /* Display Screen */
     .display-screen { text-align: center; padding: 12px; border: 2px solid var(--accent); position: relative; }
@@ -115,12 +115,22 @@
   <!-- Recent Logs -->
   <div class="card">
     <div class="display-label" style="margin-bottom:6px;">Recent Control Logs</div>
-    <div class="log-container" id="logStream">
-      <!-- Dynamic Entries Append Here -->
-    </div>
+    <div class="log-container" id="logStream"></div>
   </div>
 
-  <script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+    import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCLi3NMmoJJCeJFGU4oeABpQyivQe1Z6i0",
+      authDomain: "the-regulator-rally.firebaseapp.com",
+      projectId: "the-regulator-rally"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
     let currentInput = "";
     let activePenalty = null;
 
@@ -130,39 +140,39 @@
       document.getElementById('liveClock').innerText = now.toTimeString().split(' ')[0];
     }, 1000);
 
-    // Keypad Logic
-    function pressNum(num) {
+    // Global Keypad Functions
+    window.pressNum = function(num) {
       if (currentInput.length < 3) {
         currentInput += num;
         updateDisplay();
       }
-    }
+    };
 
-    function clearInput() {
+    window.clearInput = function() {
       currentInput = "";
       activePenalty = null;
       updatePenaltyUI();
       updateDisplay();
-    }
+    };
 
-    function backspace() {
+    window.backspace = function() {
       currentInput = currentInput.slice(0, -1);
       updateDisplay();
-    }
+    };
 
     function updateDisplay() {
       document.getElementById('carDisplay').innerText = currentInput || "---";
     }
 
-    // Penalty Toggle Engine
-    function togglePenalty(type) {
+    // Penalty Engine
+    window.togglePenalty = function(type) {
       if (activePenalty === type) {
         activePenalty = null;
       } else {
         activePenalty = type;
       }
       updatePenaltyUI();
-    }
+    };
 
     function updatePenaltyUI() {
       const badge = document.getElementById('penaltyBadge');
@@ -182,8 +192,8 @@
       }
     }
 
-    // Logging & Payload Construction
-    function logTimeNow() {
+    // Push Payload to Firebase Firestore
+    window.logTimeNow = async function() {
       if (!currentInput) return;
 
       const now = new Date();
@@ -195,15 +205,23 @@
         timestampISO: now.toISOString(),
         epochMs: now.getTime(),
         timeLogged: now.toTimeString().split(' ')[0],
+        timeDisplay: now.toTimeString().split(' ')[0], // Backward compatibility
         penalty: activePenalty || "NONE"
       };
 
-      // Output to Local UI Stream (Replace or augment with Firestore addDoc)
-      appendLogToUI(payload);
+      try {
+        // 1. Write document directly into Firestore
+        await addDoc(collection(db, "control_logs"), payload);
 
-      // Reset Input Screen for next car
-      clearInput();
-    }
+        // 2. Add local log entry
+        appendLogToUI(payload);
+
+        // 3. Clear display for next car
+        window.clearInput();
+      } catch (err) {
+        alert("Firestore Write Error: " + err.message);
+      }
+    };
 
     function appendLogToUI(data) {
       const stream = document.getElementById('logStream');
