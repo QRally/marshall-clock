@@ -143,7 +143,65 @@
     let activePenalty = null;
     let wakeLock = null;
 
-    // --- 1. Screen Wake Lock Engine ---
+    // --- 1. Web Audio & Haptic Feedback Engine ---
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new AudioCtx();
+      }
+    }
+
+    function triggerHaptic(duration = 30) {
+      if ('vibrate' in navigator) {
+        navigator.vibrate(duration);
+      }
+    }
+
+    function playTone(freq, type, duration) {
+      try {
+        initAudio();
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {
+        console.error("Audio trigger deferral:", e);
+      }
+    }
+
+    function playKeyBeep() {
+      triggerHaptic(25);
+      playTone(800, 'sine', 0.04);
+    }
+
+    function playSuccessChime() {
+      triggerHaptic([40, 50, 40]);
+      playTone(587.33, 'sine', 0.08); // D5
+      setTimeout(() => playTone(880, 'sine', 0.12), 90); // A5
+    }
+
+    function playPenaltyChime() {
+      triggerHaptic([80, 40, 80]);
+      playTone(300, 'sawtooth', 0.12);
+      setTimeout(() => playTone(220, 'sawtooth', 0.20), 120);
+    }
+
+    // --- 2. Screen Wake Lock Engine ---
     async function requestWakeLock() {
       try {
         if ('wakeLock' in navigator) {
@@ -156,16 +214,15 @@
       }
     }
 
-    // Re-apply wake lock when resuming app/tab
     document.addEventListener('visibilitychange', async () => {
       if (wakeLock !== null && document.visibilityState === 'visible') {
         await requestWakeLock();
       }
     });
 
-    requestWakeLock(); // Initial trigger
+    requestWakeLock();
 
-    // --- 2. Live Clock & Online Monitoring ---
+    // --- 3. Live Clock & Online Monitoring ---
     setInterval(() => {
       const now = new Date();
       document.getElementById('liveClock').innerText = now.toTimeString().split(' ')[0];
@@ -179,15 +236,16 @@
       if (navigator.onLine) {
         statusEl.innerText = "Online";
         statusEl.className = "status-badge status-online";
-        flushPendingQueue(); // Push offline items if reconnection occurs
+        flushPendingQueue();
       } else {
         statusEl.innerText = "Offline";
         statusEl.className = "status-badge status-offline";
       }
     }
 
-    // --- 3. Keypad & UI Logic ---
+    // --- 4. Keypad & UI Logic ---
     window.pressNum = function(num) {
+      playKeyBeep();
       if (currentInput.length < 3) {
         currentInput += num;
         updateDisplay();
@@ -195,6 +253,7 @@
     };
 
     window.clearInput = function() {
+      playKeyBeep();
       currentInput = "";
       activePenalty = null;
       updatePenaltyUI();
@@ -202,6 +261,7 @@
     };
 
     window.backspace = function() {
+      playKeyBeep();
       currentInput = currentInput.slice(0, -1);
       updateDisplay();
     };
@@ -211,6 +271,7 @@
     }
 
     window.togglePenalty = function(type) {
+      playKeyBeep();
       activePenalty = (activePenalty === type) ? null : type;
       updatePenaltyUI();
     };
@@ -229,9 +290,16 @@
       }
     }
 
-    // --- 4. Store-First Logging Engine ---
+    // --- 5. Store-First Logging Engine ---
     window.logTimeNow = async function() {
       if (!currentInput) return;
+
+      // Auditory & Haptic Feedback
+      if (activePenalty && activePenalty !== 'NONE') {
+        playPenaltyChime();
+      } else {
+        playSuccessChime();
+      }
 
       const now = new Date();
       const payload = {
