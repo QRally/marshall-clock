@@ -18,9 +18,13 @@
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: var(--bg); color: var(--text); padding: 12px; max-width: 480px; margin: 0 auto; min-height: 100vh; }
 
-    /* Header */
+    /* Header & Status Bar */
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    .status-badge { background: #1b381e; color: #4caf50; font-size: 0.75rem; font-weight: bold; padding: 4px 8px; border-radius: 12px; border: 1px solid #2e7d32; }
+    .status-container { display: flex; gap: 6px; }
+    .status-badge { font-size: 0.75rem; font-weight: bold; padding: 4px 8px; border-radius: 12px; border: 1px solid transparent; }
+    .status-online { background: #1b381e; color: #4caf50; border-color: #2e7d32; }
+    .status-offline { background: #3a1c1c; color: #f44336; border-color: #7f1d1d; }
+    .status-wakelock { background: #1c2d3a; color: #00bcd4; border-color: #00838f; }
 
     /* Controls Setup */
     .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 10px; margin-bottom: 8px; }
@@ -59,13 +63,17 @@
     .log-tag { font-weight: bold; color: var(--accent); }
     .log-pen-tag { color: var(--danger); font-size: 0.75rem; font-weight: bold; margin-left: 6px; }
     .log-time { font-family: monospace; color: var(--text-dim); }
+    .sync-status { font-size: 0.7rem; color: #ff9800; margin-left: 4px; }
   </style>
 </head>
 <body>
 
   <div class="header">
     <h3>Rally Timing Control</h3>
-    <span class="status-badge">Online / Live</span>
+    <div class="status-container">
+      <span class="status-badge status-wakelock" id="wakeStatus">Lock Off</span>
+      <span class="status-badge status-online" id="netStatus">Online</span>
+    </div>
   </div>
 
   <!-- Control Point Selection & Live Clock -->
@@ -133,14 +141,52 @@
 
     let currentInput = "";
     let activePenalty = null;
+    let wakeLock = null;
 
-    // Live Clock Engine
+    // --- 1. Screen Wake Lock Engine ---
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          document.getElementById('wakeStatus').innerText = "Screen On";
+          document.getElementById('wakeStatus').className = "status-badge status-wakelock";
+        }
+      } catch (err) {
+        document.getElementById('wakeStatus').innerText = "Lock Err";
+      }
+    }
+
+    // Re-apply wake lock when resuming app/tab
+    document.addEventListener('visibilitychange', async () => {
+      if (wakeLock !== null && document.visibilityState === 'visible') {
+        await requestWakeLock();
+      }
+    });
+
+    requestWakeLock(); // Initial trigger
+
+    // --- 2. Live Clock & Online Monitoring ---
     setInterval(() => {
       const now = new Date();
       document.getElementById('liveClock').innerText = now.toTimeString().split(' ')[0];
     }, 1000);
 
-    // Global Keypad Functions
+    window.addEventListener('online', updateNetStatus);
+    window.addEventListener('offline', updateNetStatus);
+
+    function updateNetStatus() {
+      const statusEl = document.getElementById('netStatus');
+      if (navigator.onLine) {
+        statusEl.innerText = "Online";
+        statusEl.className = "status-badge status-online";
+        flushPendingQueue(); // Push offline items if reconnection occurs
+      } else {
+        statusEl.innerText = "Offline";
+        statusEl.className = "status-badge status-offline";
+      }
+    }
+
+    // --- 3. Keypad & UI Logic ---
     window.pressNum = function(num) {
       if (currentInput.length < 3) {
         currentInput += num;
@@ -164,24 +210,15 @@
       document.getElementById('carDisplay').innerText = currentInput || "---";
     }
 
-    // Penalty Engine
     window.togglePenalty = function(type) {
-      if (activePenalty === type) {
-        activePenalty = null;
-      } else {
-        activePenalty = type;
-      }
+      activePenalty = (activePenalty === type) ? null : type;
       updatePenaltyUI();
     };
 
     function updatePenaltyUI() {
       const badge = document.getElementById('penaltyBadge');
       document.querySelectorAll('.btn-penalty').forEach(btn => {
-        if (btn.innerText === activePenalty) {
-          btn.classList.add('selected');
-        } else {
-          btn.classList.remove('selected');
-        }
+        btn.classList.toggle('selected', btn.innerText === activePenalty);
       });
 
       if (activePenalty) {
@@ -192,54 +229,102 @@
       }
     }
 
-    // Push Payload to Firebase Firestore
+    // --- 4. Store-First Logging Engine ---
     window.logTimeNow = async function() {
       if (!currentInput) return;
 
       const now = new Date();
-      const control = document.getElementById('controlPoint').value;
-      
       const payload = {
+        id: 'log_' + Date.now(),
         carNumber: currentInput,
-        controlPoint: control,
+        controlPoint: document.getElementById('controlPoint').value,
         timestampISO: now.toISOString(),
         epochMs: now.getTime(),
         timeLogged: now.toTimeString().split(' ')[0],
-        timeDisplay: now.toTimeString().split(' ')[0], // Backward compatibility
-        penalty: activePenalty || "NONE"
+        timeDisplay: now.toTimeString().split(' ')[0],
+        penalty: activePenalty || "NONE",
+        synced: false
       };
 
-      try {
-        // 1. Write document directly into Firestore
-        await addDoc(collection(db, "control_logs"), payload);
+      // 1. Save Locally First
+      saveToLocalQueue(payload);
+      appendLogToUI(payload);
+      window.clearInput();
 
-        // 2. Add local log entry
-        appendLogToUI(payload);
-
-        // 3. Clear display for next car
-        window.clearInput();
-      } catch (err) {
-        alert("Firestore Write Error: " + err.message);
+      // 2. Try Firestore Sync immediately
+      if (navigator.onLine) {
+        await syncSinglePayload(payload);
       }
     };
 
-    function appendLogToUI(data) {
-      const stream = document.getElementById('logStream');
-      const item = document.createElement('div');
-      item.className = `log-item ${data.penalty !== 'NONE' ? 'has-penalty' : ''}`;
-      
-      const penTag = data.penalty !== 'NONE' ? `<span class="log-pen-tag">[${data.penalty}]</span>` : '';
-      
-      item.innerHTML = `
-        <div>
-          <span class="log-tag">[${data.controlPoint}]</span> 
-          Car #${data.carNumber} ${penTag}
-        </div>
-        <div class="log-time">${data.timeLogged}</div>
-      `;
-      
-      stream.insertBefore(item, stream.firstChild);
+    function saveToLocalQueue(payload) {
+      let queue = JSON.parse(localStorage.getItem('qrally_logs') || '[]');
+      queue.unshift(payload);
+      localStorage.setItem('qrally_logs', JSON.stringify(queue));
     }
+
+    async function syncSinglePayload(payload) {
+      try {
+        await addDoc(collection(db, "control_logs"), {
+          carNumber: payload.carNumber,
+          controlPoint: payload.controlPoint,
+          timestampISO: payload.timestampISO,
+          epochMs: payload.epochMs,
+          timeLogged: payload.timeLogged,
+          timeDisplay: payload.timeDisplay,
+          penalty: payload.penalty
+        });
+        markLocalAsSynced(payload.id);
+      } catch (e) {
+        console.error("Firestore deferral:", e);
+      }
+    }
+
+    function markLocalAsSynced(id) {
+      let queue = JSON.parse(localStorage.getItem('qrally_logs') || '[]');
+      queue = queue.map(item => item.id === id ? { ...item, synced: true } : item);
+      localStorage.setItem('qrally_logs', JSON.stringify(queue));
+      renderLocalHistory();
+    }
+
+    async function flushPendingQueue() {
+      let queue = JSON.parse(localStorage.getItem('qrally_logs') || '[]');
+      const unsynced = queue.filter(item => !item.synced);
+      for (let item of unsynced) {
+        await syncSinglePayload(item);
+      }
+    }
+
+    function appendLogToUI(data) {
+      renderLocalHistory();
+    }
+
+    function renderLocalHistory() {
+      const stream = document.getElementById('logStream');
+      const queue = JSON.parse(localStorage.getItem('qrally_logs') || '[]');
+      stream.innerHTML = "";
+
+      queue.slice(0, 20).forEach(data => {
+        const item = document.createElement('div');
+        item.className = `log-item ${data.penalty !== 'NONE' ? 'has-penalty' : ''}`;
+        
+        const penTag = data.penalty !== 'NONE' ? `<span class="log-pen-tag">[${data.penalty}]</span>` : '';
+        const syncTag = data.synced ? '' : '<span class="sync-status">(Saving...)</span>';
+        
+        item.innerHTML = `
+          <div>
+            <span class="log-tag">[${data.controlPoint}]</span> 
+            Car #${data.carNumber} ${penTag} ${syncTag}
+          </div>
+          <div class="log-time">${data.timeLogged}</div>
+        `;
+        stream.appendChild(item);
+      });
+    }
+
+    // Initial Load
+    renderLocalHistory();
+    updateNetStatus();
   </script>
 </body>
 </html>
