@@ -1,12 +1,18 @@
 <!DOCTYPE html>
-<html>
+<html lang="en-GB">
 <head>
+  <meta charset="UTF-8">
   <title>Live Rally Control Logs</title>
   <style>
-    body { font-family: sans-serif; background: #121212; color: #fff; padding: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #121212; color: #fff; padding: 20px; }
+    h2 { margin-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
     th, td { border: 1px solid #333; padding: 10px; text-align: left; }
     th { background: #1e1e1e; color: #ff9800; }
+    
+    /* Penalty Highlighting */
+    .pen-tag { background: #d32f2f; color: #fff; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 0.85rem; }
+    .row-penalty { background: rgba(211, 47, 47, 0.15); }
   </style>
 </head>
 <body>
@@ -17,6 +23,7 @@
         <th>Control</th>
         <th>Car #</th>
         <th>Time Logged</th>
+        <th>Penalty</th>
         <th>ISO Timestamp</th>
       </tr>
     </thead>
@@ -43,11 +50,19 @@
       tbody.innerHTML = "";
       snapshot.forEach((doc) => {
         const d = doc.data();
-        const row = `<tr>
-          <td>${d.controlPoint}</td>
-          <td><b>#${d.carNumber}</b></td>
-          <td>${d.timeDisplay}</td>
-          <td>${d.timestampISO}</td>
+        
+        // Handle field fallback (timeLogged vs timeDisplay)
+        const timeLogged = d.timeLogged || d.timeDisplay || "—";
+        const penaltyVal = d.penalty && d.penalty !== "NONE" ? d.penalty : "";
+        const penaltyHTML = penaltyVal ? `<span class="pen-tag">${penaltyVal}</span>` : "—";
+        const rowClass = penaltyVal ? 'class="row-penalty"' : '';
+
+        const row = `<tr ${rowClass}>
+          <td>${d.controlPoint || "—"}</td>
+          <td><b>#${d.carNumber || "—"}</b></td>
+          <td>${timeLogged}</td>
+          <td>${penaltyHTML}</td>
+          <td style="font-family: monospace; color: #aaa;">${d.timestampISO || "—"}</td>
         </tr>`;
         tbody.innerHTML += row;
       });
